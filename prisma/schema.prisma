@@ -6,7 +6,6 @@
 
 generator client {
   provider = "prisma-client-js"
-  
 }
 
 datasource db {
@@ -14,25 +13,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User{
+
+model User {
   id        String @id @default(cuid())
   clerkId   String @unique
   email     String @unique
   firstName String?
   lastName  String?
   phone     String?
-  createdAt DateTime @default(now())//member since sep2025
-  updateAt  DateTime @updatedAt
+  createdAt DateTime @default(now()) // member since sep 2025
+  updatedAt DateTime @updatedAt
 
   // relationships
   appointments Appointment[]
 
   @@map("users")
-
 }
 
-model Doctor{
-   id         String   @id @default(cuid())
+model Doctor {
+  id          String   @id @default(cuid())
   name        String
   email       String   @unique
   phone       String
@@ -50,8 +49,9 @@ model Doctor{
   @@map("doctors")
 
 }
-model Appointment{
-    id        String            @id @default(cuid())
+
+model Appointment {
+  id          String            @id @default(cuid())
   date        DateTime
   time        String // store time as string i.e. 14:30
   duration    Int               @default(30) // duration in minutes
@@ -65,14 +65,13 @@ model Appointment{
   userId String
   doctorId String
 
-    // relationships
+  // relationships
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
   doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
   @@map("appointments")
-
-
 }
+
 
 enum Gender {
   MALE

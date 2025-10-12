@@ -1,4 +1,4 @@
-import DentalHealthOverview from "./DentalHealthOverview"
+import DentalHealthOverview from "./DentalHealthOverview";
 import NextAppointment from "./NextAppointment";
 
 function ActivityOverview() {

@@ -1,30 +1,36 @@
 "use client";
 
-import { vapi } from "@/lib/vapi";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useRef, useState } from "react";
-import { Card } from "../ui/card";
 import Image from "next/image";
+import { Card } from "../ui/card";
 import { Button } from "../ui/button";
+import { vapi } from "@/lib/vapi";
+
+// Define the shape of a message
+interface Message {
+  content: string;
+  role: "assistant" | "user";
+}
 
 function VapiWidget() {
   const [callActive, setCallActive] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [callEnded, setCallEnded] = useState(false);
 
   const { user, isLoaded } = useUser();
   const messageContainerRef = useRef<HTMLDivElement>(null);
 
-  // auto-scroll for messages
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (messageContainerRef.current) {
       messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // setup event listeners for VAPI
+  // Setup VAPI event listeners
   useEffect(() => {
     const handleCallStart = () => {
       console.log("Call started");
@@ -41,25 +47,20 @@ function VapiWidget() {
       setCallEnded(true);
     };
 
-    const handleSpeechStart = () => {
-      console.log("AI started Speaking");
-      setIsSpeaking(true);
-    };
-
-    const handleSpeechEnd = () => {
-      console.log("AI stopped Speaking");
-      setIsSpeaking(false);
-    };
+    const handleSpeechStart = () => setIsSpeaking(true);
+    const handleSpeechEnd = () => setIsSpeaking(false);
 
     const handleMessage = (message: any) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
-        const newMessage = { content: message.transcript, role: message.role };
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages((prev) => [
+          ...prev,
+          { content: message.transcript, role: message.role },
+        ]);
       }
     };
 
     const handleError = (error: any) => {
-      console.log("Vapi Error", error);
+      console.error("VAPI Error:", error);
       setConnecting(false);
       setCallActive(false);
     };
@@ -72,7 +73,7 @@ function VapiWidget() {
       .on("message", handleMessage)
       .on("error", handleError);
 
-    // cleanup event listeners on unmount
+    // Cleanup
     return () => {
       vapi
         .off("call-start", handleCallStart)
@@ -84,19 +85,29 @@ function VapiWidget() {
     };
   }, []);
 
+  // Handle call start/stop
   const toggleCall = async () => {
-    if (callActive) vapi.stop();
-    else {
-      try {
-        setConnecting(true);
-        setMessages([]);
-        setCallEnded(false);
+    if (callActive) {
+      vapi.stop();
+      return;
+    }
 
-        await vapi.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID);
-      } catch (error) {
-        console.log("Failed to start call", error);
+    try {
+      setConnecting(true);
+      setMessages([]);
+      setCallEnded(false);
+
+      const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID;
+      if (!assistantId) {
+        console.error("VAPI Assistant ID is missing");
         setConnecting(false);
+        return;
       }
+
+      await vapi.start(assistantId);
+    } catch (error) {
+      console.error("Failed to start call", error);
+      setConnecting(false);
     }
   };
 
@@ -116,19 +127,16 @@ function VapiWidget() {
       </div>
 
       {/* VIDEO CALL AREA */}
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* AI ASSISTANT CARD */}
-
         <Card className="bg-card/90 backdrop-blur-sm border border-border overflow-hidden relative">
           <div className="aspect-video flex flex-col items-center justify-center p-6 relative">
-            {/* AI VOICE ANIMATION */}
+            {/* AI Speaking Animation */}
             <div
               className={`absolute inset-0 ${
                 isSpeaking ? "opacity-30" : "opacity-0"
               } transition-opacity duration-300`}
             >
-              {/* voice wave animation when speaking */}
               <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 flex justify-center items-center h-20">
                 {[...Array(5)].map((_, i) => (
                   <div
@@ -152,7 +160,6 @@ function VapiWidget() {
                   isSpeaking ? "animate-pulse" : ""
                 }`}
               />
-
               <div className="relative w-full h-full rounded-full bg-card flex items-center justify-center border border-border overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-primary/5"></div>
                 <Image
@@ -168,7 +175,7 @@ function VapiWidget() {
             <h2 className="text-xl font-bold text-foreground">DentWise AI</h2>
             <p className="text-sm text-muted-foreground mt-1">Dental Assistant</p>
 
-            {/* SPEAKING INDICATOR */}
+            {/* Speaking Status */}
             <div
               className={`mt-4 flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-border ${
                 isSpeaking ? "border-primary" : ""
@@ -179,7 +186,6 @@ function VapiWidget() {
                   isSpeaking ? "bg-primary animate-pulse" : "bg-muted"
                 }`}
               />
-
               <span className="text-xs text-muted-foreground">
                 {isSpeaking
                   ? "Speaking..."
@@ -194,61 +200,58 @@ function VapiWidget() {
         </Card>
 
         {/* USER CARD */}
-        <Card className={`bg-card/90 backdrop-blur-sm border overflow-hidden relative`}>
+        <Card className="bg-card/90 backdrop-blur-sm border overflow-hidden relative">
           <div className="aspect-video flex flex-col items-center justify-center p-6 relative">
-            {/* User Image */}
             <div className="relative size-32 mb-4">
               <Image
-                src={user?.imageUrl!}
+                src={user?.imageUrl || "/default-user.png"}
                 alt="User"
                 width={128}
                 height={128}
                 className="size-full object-cover rounded-full"
               />
             </div>
-
             <h2 className="text-xl font-bold text-foreground">You</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {user ? (user.firstName + " " + (user.lastName || "")).trim() : "Guest"}
+              {user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : "Guest"}
             </p>
-
-            {/* User Ready Text */}
-            <div className={`mt-4 flex items-center gap-2 px-3 py-1 rounded-full bg-card border`}>
-              <div className={`w-2 h-2 rounded-full bg-muted`} />
+            <div className="mt-4 flex items-center gap-2 px-3 py-1 rounded-full bg-card border">
+              <div className="w-2 h-2 rounded-full bg-muted" />
               <span className="text-xs text-muted-foreground">Ready</span>
             </div>
           </div>
         </Card>
       </div>
 
-      {/* MESSAGE CONTAINER */}
+      {/* MESSAGES */}
       {messages.length > 0 && (
         <div
           ref={messageContainerRef}
-          className="w-full bg-card/90 backdrop-blur-sm border border-border rounded-xl p-4 mb-8 h-64 overflow-y-auto transition-all duration-300 scroll-smooth"
+          className="w-full bg-card/90 backdrop-blur-sm border border-border rounded-xl p-4 mb-8 h-64 overflow-y-auto scroll-smooth"
         >
           <div className="space-y-3">
-            {messages.map((msg, index) => (
-              <div key={index} className="message-item animate-in fade-in duration-300">
+            {messages.map((msg, i) => (
+              <div key={i} className="animate-in fade-in">
                 <div className="font-semibold text-xs text-muted-foreground mb-1">
                   {msg.role === "assistant" ? "DentWise AI" : "You"}:
                 </div>
                 <p className="text-foreground">{msg.content}</p>
               </div>
             ))}
-
             {callEnded && (
-              <div className="message-item animate-in fade-in duration-300">
+              <div className="animate-in fade-in">
                 <div className="font-semibold text-xs text-primary mb-1">System:</div>
-                <p className="text-foreground">Call ended. Thank you for using DentWise AI!</p>
+                <p className="text-foreground">
+                  Call ended. Thank you for using DentWise AI!
+                </p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* CALL CONTROLS */}
-      <div className="w-full flex justify-center gap-4">
+      {/* CALL BUTTON */}
+      <div className="flex justify-center">
         <Button
           className={`w-44 text-xl rounded-3xl ${
             callActive
@@ -258,21 +261,18 @@ function VapiWidget() {
               : "bg-primary hover:bg-primary/90"
           } text-white relative`}
           onClick={toggleCall}
-          disabled={connecting || callEnded}
+          disabled={connecting}
         >
           {connecting && (
-            <span className="absolute inset-0 rounded-full animate-ping bg-primary/50 opacity-75"></span>
+            <span className="absolute inset-0 rounded-full animate-ping bg-primary/50 opacity-75" />
           )}
-
-          <span>
-            {callActive
-              ? "End Call"
-              : connecting
-              ? "Connecting..."
-              : callEnded
-              ? "Call Ended"
-              : "Start Call"}
-          </span>
+          {callActive
+            ? "End Call"
+            : connecting
+            ? "Connecting..."
+            : callEnded
+            ? "Call Ended"
+            : "Start Call"}
         </Button>
       </div>
     </div>

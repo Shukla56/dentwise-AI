@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "../prisma";
 import { AppointmentStatus } from "@prisma/client";
+import { ensureUserExists } from "./users";
 
 function transformAppointment(appointment: any) {
   return {
@@ -40,13 +41,15 @@ export async function getAppointments() {
 
 export async function getUserAppointments() {
   try {
-    // get authenticated user from Clerk
+    // Get authenticated user from Clerk
     const { userId } = await auth();
     if (!userId) throw new Error("You must be logged in to view appointments");
 
-    // find user by clerkId from authenticated session
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) throw new Error("User not found. Please ensure your account is properly set up.");
+    // Ensure user exists in database (will create if needed)
+    const user = await ensureUserExists();
+    if (!user) {
+      throw new Error("Unable to verify user account. Please try signing in again.");
+    }
 
     const appointments = await prisma.appointment.findMany({
       where: { userId: user.id },
@@ -60,7 +63,7 @@ export async function getUserAppointments() {
     return appointments.map(transformAppointment);
   } catch (error) {
     console.error("Error fetching user appointments:", error);
-    throw new Error("Failed to fetch user appointments");
+    throw error;
   }
 }
 
@@ -69,11 +72,14 @@ export async function getUserAppointmentStats() {
     const { userId } = await auth();
     if (!userId) throw new Error("You must be authenticated");
 
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+    // Ensure user exists in database (will create if needed)
+    const user = await ensureUserExists();
+    if (!user) {
+      console.warn("⚠️ User not found, returning zero stats");
+      return { totalAppointments: 0, completedAppointments: 0 };
+    }
 
-    if (!user) throw new Error("User not found");
-
-    // these calls will run in parallel, instead of waiting each other
+    // These calls will run in parallel, instead of waiting for each other
     const [totalCount, completedCount] = await Promise.all([
       prisma.appointment.count({
         where: { userId: user.id },
@@ -92,6 +98,7 @@ export async function getUserAppointmentStats() {
     };
   } catch (error) {
     console.error("Error fetching user appointment stats:", error);
+    // Return zero stats instead of throwing to prevent UI crashes
     return { totalAppointments: 0, completedAppointments: 0 };
   }
 }
@@ -132,8 +139,11 @@ export async function bookAppointment(input: BookAppointmentInput) {
       throw new Error("Doctor, date, and time are required");
     }
 
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) throw new Error("User not found. Please ensure your account is properly set up.");
+    // Ensure user exists in database (will create if needed)
+    const user = await ensureUserExists();
+    if (!user) {
+      throw new Error("Unable to verify user account. Please try signing in again.");
+    }
 
     const appointment = await prisma.appointment.create({
       data: {
